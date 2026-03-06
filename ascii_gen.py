@@ -135,6 +135,21 @@ def simple_ascii_to_image(original_img, ascii_lines, out_path, font_path=None, f
             b, g, r = small_color[y, x]
             draw.text((int(x * char_w * char_spacing), int(y * char_h)), char, fill=(int(r), int(g), int(b)), font=font)
 
+    # Add timestamp and custom text overlay
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%d %B %Y')
+    overlay_text = f"{timestamp} | DataBased IISc Open Day 2026"
+    # Draw overlay at the bottom left
+    overlay_font = font
+    overlay_bbox = overlay_font.getbbox(overlay_text)
+    overlay_w = overlay_bbox[2] - overlay_bbox[0]
+    overlay_h = overlay_bbox[3] - overlay_bbox[1]
+    margin = 10
+    x_overlay = margin
+    y_overlay = height - overlay_h - margin
+    draw.rectangle([(x_overlay-5, y_overlay-5), (x_overlay+overlay_w+5, y_overlay+overlay_h+5)], fill=(0,0,0,128))
+    draw.text((x_overlay, y_overlay), overlay_text, fill=(255,255,255), font=overlay_font)
+
     canvas.save(out_path)
     return out_path
 

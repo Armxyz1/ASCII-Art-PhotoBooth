@@ -1,6 +1,11 @@
 import os
 import time
 import argparse
+import re
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from email.mime.text import MIMEText
 
 import cv2
 import numpy as np
@@ -11,6 +16,46 @@ from detect import detect_top_faces
 from align import align_face
 from ascii_gen import image_to_ascii, ascii_to_color_image, simple_image_to_ascii, simple_ascii_to_image
 
+def send_email(to_email, image_path, subject="Your ASCII Art Photo"):
+    """
+    Send an email with the ASCII image attached.
+    Requires environment variables: EMAIL_USER, EMAIL_PASS, SMTP_SERVER (default gmail), SMTP_PORT (default 587)
+    """
+    from_email = os.getenv('EMAIL_USER')
+    password = os.getenv('EMAIL_PASS')
+    smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    smtp_port = int(os.getenv('SMTP_PORT', 587))
+    
+    if not from_email or not password:
+        print("Email credentials not set. Set EMAIL_USER and EMAIL_PASS environment variables.")
+        return False
+    
+    msg = MIMEMultipart()
+    msg['From'] = from_email
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    
+    body = "Here's your ASCII art photo!"
+    msg.attach(MIMEText(body, 'plain'))
+    
+    with open(image_path, 'rb') as f:
+        img = MIMEImage(f.read())
+        img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(image_path))
+        msg.attach(img)
+    
+    try:
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(from_email, password)
+        text = msg.as_string()
+        server.sendmail(from_email, to_email, text)
+        server.quit()
+        print(f"Email sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        return False
+    
 
 def main(ascii_width=300, brightness_beta=30, char_ratio=1.0, char_spacing=1.0, camera_index=None, overlay_scale=0.35):
 
@@ -185,16 +230,15 @@ def main(ascii_width=300, brightness_beta=30, char_ratio=1.0, char_spacing=1.0, 
                 print(f"{len(crops)} regions detected")
 
                 for i, face_crop in enumerate(crops):
-                    aligned = align_face(face_crop)
-                    aligned = cv2.resize(aligned, None, fx=1.2, fy=1.2)
+                    face_crop_resized = cv2.resize(face_crop, None, fx=1.2, fy=1.2)
 
                     # Use simple equal-cell ASCII generator (cols == ascii_width)
-                    ascii_lines = simple_image_to_ascii(aligned, cols=ascii_width)
+                    ascii_lines = simple_image_to_ascii(face_crop_resized, cols=ascii_width)
 
                     filename = f"gallery/ascii_face_{int(time.time())}_{i}.png"
 
                     # Render using simple fixed-cell renderer; pass char_spacing by name
-                    simple_ascii_to_image(aligned, ascii_lines, filename, char_spacing=char_spacing)
+                    simple_ascii_to_image(face_crop_resized, ascii_lines, filename, char_spacing=char_spacing)
 
                     print("Saved:", filename)
 
@@ -258,7 +302,18 @@ def main(ascii_width=300, brightness_beta=30, char_ratio=1.0, char_spacing=1.0, 
                         k = cv2.waitKey(1) & 0xFF
                         if k == 13 or k == 10:  # Enter
                             email_mode = False
-                            print(f"Email entered: {email_text} (not sent)")
+                            if email_text:
+                                # Validate email
+                                if re.match(r"[^@]+@[^@]+\.[^@]+", email_text):
+                                    # Send the image
+                                    if send_email(email_text, filename):
+                                        print(f"Image sent to {email_text}")
+                                    else:
+                                        print("Failed to send image")
+                                else:
+                                    print("Invalid email address")
+                            else:
+                                print("No email entered")
                             break
                         elif k == 27:  # ESC cancel
                             email_mode = False
@@ -286,7 +341,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--ascii-width", type=int, default=200,
                    help="Width (in characters) for generated ASCII art. Larger = higher resolution")
-    p.add_argument("--char-ratio", type=float, default=1.0,
+    p.add_argument("--char-ratio", type=float, default=0.8,
                    help="Character width/height ratio correction. >1 makes output taller.")
     p.add_argument("--brightness", type=int, default=30,
                    help="Brightness beta to add to captured frames (passed to OpenCV convertScaleAbs).")

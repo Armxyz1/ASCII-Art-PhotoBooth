@@ -4,7 +4,7 @@ import numpy as np
 mp_face = mp.solutions.face_detection
 
 
-def detect_top_faces(frame, top_n=3):
+def detect_top_faces(frame, top_n=5):
 
     h, w, _ = frame.shape
     center = np.array([w/2, h/2])
@@ -13,7 +13,7 @@ def detect_top_faces(frame, top_n=3):
 
     with mp_face.FaceDetection(
         model_selection=0,
-        min_detection_confidence=0.3
+        min_detection_confidence=0.2
     ) as detector:
 
         results = detector.process(frame[:, :, ::-1])
