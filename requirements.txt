@@ -1,0 +1,8 @@
+opencv-python
+numpy
+pillow
+ascii_magic
+mediapipe
+yagmail
+pyzbar
+qrcode
