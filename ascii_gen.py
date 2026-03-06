@@ -1,11 +1,13 @@
 import cv2
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 
 ASCII_CHARS = (
 "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/"
 "|()1{}[]?-_+~<>i!lI;:,\"^`'. "
 )
+
+
+# Simple fixed-size charset good for clearer, uniform ASCII
+SIMPLE_CHARS = ".,:;i1tfLCG08@"
 
 
 def preprocess(img):
@@ -64,7 +66,80 @@ def image_to_ascii(img, width=140, char_ratio=1.0):
     return ascii_lines
 
 
-def ascii_to_color_image(original_img, ascii_lines, out_path):
+def simple_image_to_ascii(img, cols=80, charset=SIMPLE_CHARS):
+    """Convert image to ASCII using equal-sized character cells.
+
+    This produces simpler ASCII art where every character maps to a fixed cell
+    and therefore all characters have the same rendered size.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    h, w = gray.shape
+
+    cell_w = max(1, w // cols)
+    cols = w // cell_w
+    rows = max(1, h // cell_w)
+
+    ascii_lines = []
+    for r in range(rows):
+        y1 = r * cell_w
+        y2 = min(h, (r + 1) * cell_w)
+        line = ""
+        for c in range(cols):
+            x1 = c * cell_w
+            x2 = min(w, (c + 1) * cell_w)
+            cell = gray[y1:y2, x1:x2]
+            if cell.size == 0:
+                avg = 0
+            else:
+                avg = int(cell.mean())
+
+            idx = int((avg / 255) * (len(charset) - 1))
+            line += charset[idx]
+        ascii_lines.append(line)
+
+    return ascii_lines
+
+
+def simple_ascii_to_image(original_img, ascii_lines, out_path, font_path=None, font_size=12, char_spacing=1.0):
+    """Render simple ASCII lines to an RGB image using fixed-size character cells.
+
+    If `font_path` is provided it will be used; otherwise `ImageFont.load_default()` is used.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import cv2
+
+    if font_path:
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except Exception:
+            font = ImageFont.load_default()
+    else:
+        font = ImageFont.load_default()
+
+    bbox = font.getbbox("A")
+    char_w = bbox[2] - bbox[0]
+    char_h = bbox[3] - bbox[1]
+
+    width = int(char_w * len(ascii_lines[0]) * char_spacing)
+    height = char_h * len(ascii_lines)
+
+    canvas = Image.new("RGB", (width, height), "black")
+    draw = ImageDraw.Draw(canvas)
+
+    # Resize color source to match ascii grid so colors map one-to-one
+    small_color = cv2.resize(original_img, (len(ascii_lines[0]), len(ascii_lines)), interpolation=cv2.INTER_NEAREST)
+
+    for y, line in enumerate(ascii_lines):
+        for x, char in enumerate(line):
+            b, g, r = small_color[y, x]
+            draw.text((int(x * char_w * char_spacing), int(y * char_h)), char, fill=(int(r), int(g), int(b)), font=font)
+
+    canvas.save(out_path)
+    return out_path
+
+
+def ascii_to_color_image(original_img, ascii_lines, out_path, char_spacing=1.0):
 
     from PIL import Image, ImageDraw, ImageFont
     import cv2
@@ -76,7 +151,7 @@ def ascii_to_color_image(original_img, ascii_lines, out_path):
     char_w = bbox[2] - bbox[0]
     char_h = bbox[3] - bbox[1]
 
-    width = char_w * len(ascii_lines[0])
+    width = int(char_w * len(ascii_lines[0]) * char_spacing)
     height = char_h * len(ascii_lines)
 
     canvas = Image.new("RGB", (width, height), "black")
@@ -95,7 +170,7 @@ def ascii_to_color_image(original_img, ascii_lines, out_path):
             b, g, r = small_color[y, x]
 
             draw.text(
-                (x * char_w, y * char_h),
+                (int(x * char_w * char_spacing), int(y * char_h)),
                 char,
                 fill=(int(r), int(g), int(b)),
                 font=font

@@ -13,7 +13,7 @@ def detect_top_faces(frame, top_n=3):
 
     with mp_face.FaceDetection(
         model_selection=0,
-        min_detection_confidence=0.6
+        min_detection_confidence=0.3
     ) as detector:
 
         results = detector.process(frame[:, :, ::-1])

@@ -33,9 +33,50 @@ def resize_with_aspect(frame, target_width=None, target_height=None):
     return cv2.resize(frame, (new_w, new_h), interpolation=interp)
 
 
-def capture_frame(brightness_beta=30, max_width=None, max_height=None):
+def list_available_cameras(max_index=8, probe_frames=2, use_dshow=True):
+    """Probe camera indices 0..max_index and return list of indices that can capture frames.
 
-    cap = cv2.VideoCapture(0)
+    On Windows `cv2.CAP_DSHOW` is often faster for probing. Returns a list of ints.
+    """
+    available = []
+    backend = cv2.CAP_DSHOW if use_dshow else 0
+
+    for i in range(0, max_index + 1):
+        try:
+            cap = cv2.VideoCapture(i, backend) if backend != 0 else cv2.VideoCapture(i)
+        except Exception:
+            continue
+
+        if not cap or not cap.isOpened():
+            try:
+                cap.release()
+            except Exception:
+                pass
+            continue
+
+        ok = False
+        for _ in range(probe_frames):
+            ret, _ = cap.read()
+            if ret:
+                ok = True
+                break
+
+        try:
+            cap.release()
+        except Exception:
+            pass
+
+        if ok:
+            available.append(i)
+
+    return available
+
+
+def capture_frame(camera_index=None, brightness_beta=30, max_width=None, max_height=None):
+
+    cam_idx = 0 if camera_index is None else camera_index
+
+    cap = cv2.VideoCapture(cam_idx)
 
     print("Press SPACE to capture | ESC to quit")
 
